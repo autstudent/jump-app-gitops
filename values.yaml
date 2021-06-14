@@ -8,6 +8,7 @@ jump-app-cicd:
   namespaceDev: san20-jump-app-dev
   namespacePre: mock-value-pre
   namespacePro: mock-value-pro
+  namespaceGitOps: san20-gitops-argocd
   enabled: true
   functTestRepo: https://github.com/acidonper/jump-app-functional-tests.git
   functTestRepoBranch: master
