@@ -1,5 +1,5 @@
 jump-app-micros:
-  enabled: false
+  enabled: true
 
 # Global variables
 global:
