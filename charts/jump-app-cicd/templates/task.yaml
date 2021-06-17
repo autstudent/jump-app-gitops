@@ -1,0 +1,202 @@
+{{- range $type := .Values.pipeTypes }}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-{{ $type }}-new-commit-test
+spec:
+  resources:
+    inputs:
+      - name: workspace
+        type: git
+        targetPath: git-app
+  steps:
+{{- if eq $type "nodejs"}}
+    - name: npm-install
+      image: node
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - npm install
+      workingDir: /workspace/git-app
+    - name: npm-test
+      image: node
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - npm run test
+      workingDir: /workspace/git-app
+{{- end }}
+{{- if eq $type "java"}}
+    - name: mvn-package
+      image: gcr.io/cloud-builders/mvn
+      command:
+        - /usr/bin/mvn
+      args:
+      - package
+      workingDir: /workspace/git-app
+{{- end }}
+{{- if eq $type "python"}}
+    - name: pip-install
+      image: python
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - pip install -r requirements.txt
+      workingDir: /workspace/git-app
+    - name: python-test
+      image: python
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - /tekton/home/.local/bin/pytest -v
+      workingDir: /workspace/git-app
+{{- end }}
+{{- if eq $type "golang"}}
+    - name: go-test
+      image: golang
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - make test
+      workingDir: /workspace/git-app
+{{- end }}
+{{- end }}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-new-commit-start-build-tag
+spec:
+  params:
+    - name: buildconfig
+      description: The name of the buildconfig
+      type: string
+    - name: commit
+      description: The name of the commit
+      type: string
+  steps:
+    - name: run-new-build
+      image: quay.io/openshift/origin-cli:latest
+      script: |
+          #!/usr/bin/env bash
+          oc start-build bc/"$(params.buildconfig)" --commit="$(params.commit)" -n {{ $.Release.Namespace }} -w
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-new-commit-image-tag
+spec:
+  params:
+    - name: imagestream
+      description: The name of the imagestream
+      type: string
+    - name: branch
+      description: The name of the branch
+      type: string
+    - name: commit
+      description: The name of the commit
+      type: string
+  steps:
+    - name: run-new-build
+      image: quay.io/openshift/origin-cli:latest
+      script: |
+        #!/usr/bin/env bash
+        oc tag "$(params.imagestream)":"$(params.branch)" "$(params.imagestream)":"$(params.commit)" -n {{ $.Release.Namespace }} 
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-new-commit-image-deploy-by-argocd
+spec:
+  params:
+    - name: argoapp
+      description: The name of the argocdapp
+      type: string
+    - name: app
+      description: The name of the app
+      type: string
+    - name: commit
+      description: The name of the app commit
+      type: string
+  steps:
+    - name: run-new-build
+      image: quay.io/openshift/origin-cli:latest
+      script: |
+        #!/usr/bin/env bash
+        export ARGOCD_PASS=$(oc get secret argocd-cluster -o jsonpath='{.data.admin\.password}' -n {{ .Values.namespaceGitOps }} | base64 -d)
+        curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/download/v1.8.3/argocd-linux-amd64
+        chmod +x /tmp/argocd
+        /tmp/argocd login argocd-server.{{ .Values.namespaceGitOps }}.svc.cluster.local:443 --username admin --password $ARGOCD_PASS --insecure
+        /tmp/argocd app set "$(params.argoapp)" -p global.apps."$(params.app)".imagetag="$(params.commit)"
+        /tmp/argocd app sync "$(params.argoapp)"
+        /tmp/argocd app wait "$(params.argoapp)"
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-new-commit-pre-functional-tests
+spec:
+  resources:
+    inputs:
+      - name: workspace
+        type: git
+        targetPath: e2e
+  params:
+    - name: appurl
+      description: The url of the frontend app
+      type: string
+  steps:
+    - name: cypress-install
+      args:
+        - npm install
+      command:
+        - /bin/sh
+        - '-c'
+      image: 'cypress/base:14.15.4'
+      workingDir: /workspace/e2e
+    - name: cypress-run
+      args:
+        - './node_modules/.bin/cypress run --env jump_app_url="$(params.appurl)"'
+      command:
+        - /bin/sh
+        - '-c'
+      image: 'cypress/base:14.15.4'
+      workingDir: /workspace/e2e
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-new-commit-image-deployment-test
+spec:
+  params:
+    - name: namespace
+      description: The url of the frontend app
+      type: string
+    - name: deployment
+      description: The name of the deployment
+      type: string
+    - name: version
+      description: The name of the deployment version
+      type: string
+    - name: commit
+      description: The name of the commit
+      type: string
+  steps:
+    - name: run-new-build
+      image: quay.io/openshift/origin-cli:latest
+      script: |
+        #!/usr/bin/env bash
+        export IMAGE_DEPLOYMENT=`oc get deployment "$(params.deployment)"-"$(params.version)" -o jsonpath="{..image}" -n "$(params.namespace)"`
+        if echo $IMAGE_DEPLOYMENT | egrep -iq "$(params.commit)"; then
+          echo "OK - Image with commit "$(params.commit)" found"
+          exit 0
+        else
+          echo "FAIL - Image with commit "$(params.commit)" not found"
+          exit 1
+        fi

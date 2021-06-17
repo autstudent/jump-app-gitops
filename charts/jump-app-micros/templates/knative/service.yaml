@@ -1,0 +1,126 @@
+{{- if $.Values.knative.enabled }}
+{{- range $key, $val := $.Values.global.apps }}
+{{- $versions := ternary "v1 v2" "v1" $val.multiVersions.enabled }}
+{{- if $val.knative }}
+{{- if $.Values.istio.enabled }}
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  labels:
+    app: {{ $key }}
+    {{- if not $val.public }}
+    networking.knative.dev/visibility: cluster-local
+    {{- end }}
+  name: {{ $key }}
+spec:
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "true"
+      labels:
+        name: {{ $key }}
+        app: {{ $key }}
+    spec:
+      timeoutSeconds: 300
+      containerConcurrency: 0
+      containers:
+      - image: image-registry.openshift-image-registry.svc:5000/{{ $.Values.cicd.namespace }}/{{ $key }}:{{ $val.imagetag }}
+        name: {{ $key }}
+        ports:
+        {{- range $keyport, $valport := $val.containerPorts }}
+          - containerPort: {{ $valport.containerPort }}
+            protocol: {{ $valport.protocol }}
+        {{- end }}
+        readinessProbe:
+          successThreshold: 1
+          tcpSocket:
+            port: 0
+        resources: {}
+    {{- if $val.envVars }}
+        env:
+        {{- range $keyenvvar, $valueenvvar := $val.envVars }}  
+          - name: {{ $keyenvvar }}
+            value: {{ $valueenvvar }}
+        {{- end }}
+        {{- if $val.backend }}
+          - name: REACT_APP_BACK
+            value: https://{{ $val.backend }}-{{ $.Release.Namespace }}.{{ $.Values.global.appsDomain }}/jump
+            {{- range $appkey, $appval := $.Values.global.apps }}
+              {{- if $appval.frontSettings }}
+          - name: {{ $appval.frontSettings.var }}
+                {{- if $appval.knative }}
+            value: http://{{ $appkey }}.{{ $.Release.Namespace }}.svc.cluster.local
+                {{- else }}
+            value: http://{{ $appkey }}:{{ $appval.frontSettings.port }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+        {{- end }}
+    {{- end }}
+{{- else }}
+  {{- range $version := (split " " $versions) }}
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  labels:
+    app: {{ $key }}
+    version: {{ $version }}
+    {{- if not $val.public }}
+    networking.knative.dev/visibility: cluster-local
+    {{- end }}
+  name: {{ $key }}-{{ $version }}
+spec:
+  template:
+    metadata:
+      labels:
+        name: {{ $key }}-{{ $version }}
+        app: {{ $key }}
+        version: {{ $version }}
+    spec:
+      timeoutSeconds: 300
+      containerConcurrency: 0
+      containers:
+      {{- if contains "v1" $version }}
+      - image: image-registry.openshift-image-registry.svc:5000/{{ $.Values.cicd.namespace }}/{{ $key }}:{{ $val.imagetag }}
+      {{- else if contains "v2" $version }}
+      - image: image-registry.openshift-image-registry.svc:5000/{{ $.Values.cicd.namespace }}/{{ $key }}:{{ $val.multiVersions.imagetag }}
+      {{- end }}
+        name: {{ $key }}-{{ $version }}
+        ports:
+        {{- range $keyport, $valport := $val.containerPorts }}
+          - containerPort: {{ $valport.containerPort }}
+            protocol: {{ $valport.protocol }}
+        {{- end }}
+        readinessProbe:
+          successThreshold: 1
+          tcpSocket:
+            port: 0
+        resources: {}
+    {{- if $val.envVars }}
+        env:
+        {{- range $keyenvvar, $valueenvvar := $val.envVars }}  
+          - name: {{ $keyenvvar }}
+            value: {{ $valueenvvar }}
+        {{- end }}
+        {{- if $val.backend }}
+          - name: REACT_APP_BACK
+            value: https://{{ $val.backend }}-{{ $version }}-{{ $.Release.Namespace }}.{{ $.Values.global.appsDomain }}/jump
+            {{- range $appkey, $appval := $.Values.global.apps }}
+              {{- if $appval.frontSettings }}
+          - name: {{ $appval.frontSettings.var }}
+                {{- if $appval.knative }}
+            value: http://{{ $appkey }}-{{ $version }}.{{ $.Release.Namespace }}.svc.cluster.local
+                {{- else }}
+            value: http://{{ $appkey }}-{{ $version }}:{{ $appval.frontSettings.port }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
