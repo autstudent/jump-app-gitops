@@ -1,0 +1,16 @@
+jump-app-micros:
+  enabled: false
+
+# Global variables
+global:
+  appsDomain: apps.sanlab.sandbox1571.opentlc.com
+  # Jump microservices settings
+  apps:
+    back-python:
+      build: is
+      imagestream: python:latest
+      imagestreamNamespace: openshift
+      versions:
+        - v1
+      gitRepo: https://github.com/acidonper/jump-app-python.git
+      type: python

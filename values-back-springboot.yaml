@@ -1,0 +1,16 @@
+jump-app-micros:
+  enabled: false
+
+# Global variables
+global:
+  appsDomain: apps.sanlab.sandbox1571.opentlc.com
+  # Jump microservices settings
+  apps:
+    back-springboot:
+      build: is
+      imagestream: java:latest
+      imagestreamNamespace: openshift
+      versions:
+        - v1
+      gitRepo: https://github.com/acidonper/jump-app-java-springboot.git
+      type: java

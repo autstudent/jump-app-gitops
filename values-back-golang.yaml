@@ -1,0 +1,11 @@
+# Global variables
+global:
+  appsDomain: apps.sanlab.sandbox1571.opentlc.com
+  # Jump microservices settings
+  apps:
+    back-golang:
+      build: dockerfile
+      versions:
+        - v1
+      gitRepo: https://github.com/acidonper/jump-app-golang.git
+      type: golang

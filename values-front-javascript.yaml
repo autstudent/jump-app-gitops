@@ -1,0 +1,13 @@
+# Global variables
+global:
+  appsDomain: apps.sanlab.sandbox1571.opentlc.com
+  # Jump microservices settings
+  apps:
+    front-javascript:
+      build: is
+      imagestream: nodejs:latest
+      imagestreamNamespace: openshift
+      versions:
+        - v1
+      type: nodejs
+      gitRepo: https://github.com/autstudent/jump-app-typescrypt-react.git
