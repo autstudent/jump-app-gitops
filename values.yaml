@@ -29,7 +29,7 @@ global:
   apps:
     front-javascript:
       build: is
-      imagestream: nodejs14
+      imagestream: nodejs14:latest
       imagestreamNamespace: user01-jump-app-cicd
       versions:
         - v1
