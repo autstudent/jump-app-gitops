@@ -29,8 +29,8 @@ global:
   apps:
     front-javascript:
       build: is
-      imagestream: nodejs:14-ubi8
-      imagestreamNamespace: openshift
+      imagestream: nodejs14
+      imagestreamNamespace: user01-jump-app-cicd
       versions:
         - v1
       type: nodejs
